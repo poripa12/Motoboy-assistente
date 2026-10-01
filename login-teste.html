@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>MotoGestor — Teste de Login</title>
+  <style>
+    :root{--bg:#f4f6f8;--card:#fff;--text:#111827;--muted:#6b7280;--line:#e5e7eb;--accent:#f97316;--accent2:#ea580c;--ok:#15803d;--danger:#b91c1c}
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;display:grid;place-items:center;padding:20px}
+    .card{width:min(430px,100%);background:var(--card);border:1px solid var(--line);border-radius:24px;padding:24px;box-shadow:0 16px 45px rgba(17,24,39,.1)}
+    .logo{width:64px;height:64px;border-radius:20px;background:linear-gradient(145deg,var(--accent),var(--accent2));display:grid;place-items:center;font-size:32px;margin-bottom:16px}
+    h1{margin:0 0 6px;font-size:28px}
+    .sub{margin:0 0 20px;color:var(--muted);line-height:1.4}
+    input{width:100%;padding:14px 13px;border:1px solid #d1d5db;border-radius:13px;margin:0 0 10px;font:inherit;outline:none;background:#fff}
+    input:focus{border-color:#fb923c;box-shadow:0 0 0 3px rgba(249,115,22,.12)}
+    button{width:100%;border:0;border-radius:13px;padding:14px;font:inherit;font-weight:800;cursor:pointer;margin-top:4px}
+    .primary{background:var(--accent);color:white}
+    .secondary{background:#f3f4f6;color:#111827}
+    .msg{margin-top:14px;padding:12px;border-radius:12px;background:#f9fafb;color:#374151;font-size:14px;min-height:44px;white-space:pre-wrap}
+    .msg.ok{background:#ecfdf3;color:#166534}
+    .msg.err{background:#fef2f2;color:#991b1b}
+    .status{font-size:12px;color:var(--muted);margin:0 0 14px}
+    .hidden{display:none}
+    .panel{text-align:center}
+    .panel h2{margin-top:6px}
+  </style>
+</head>
+<body>
+  <section class="card" id="authCard">
+    <div class="logo">🏍️</div>
+    <h1>MotoGestor</h1>
+    <p class="sub">Organize suas entregas. Controle seu negócio.</p>
+    <div class="status" id="jsStatus">Carregando...</div>
+
+    <input id="name" placeholder="Nome" autocomplete="name">
+    <input id="whatsapp" placeholder="WhatsApp" inputmode="tel">
+    <input id="email" placeholder="E-mail" type="email" autocomplete="email">
+    <input id="password" placeholder="Senha" type="password" autocomplete="current-password">
+
+    <button type="button" class="primary" id="loginBtn">Entrar</button>
+    <button type="button" class="secondary" id="signupBtn">Criar conta</button>
+    <div class="msg" id="msg">Preencha e-mail e senha para testar.</div>
+  </section>
+
+  <section class="card panel hidden" id="panel">
+    <div class="logo" style="margin-inline:auto">✅</div>
+    <h2>Login realizado</h2>
+    <p class="sub" id="userInfo"></p>
+    <button type="button" class="secondary" id="logoutBtn">Sair</button>
+  </section>
+
+<script>
+(() => {
+  "use strict";
+
+  const SUPABASE_URL = 'https://qmocuqepifbtnvbvrivi.supabase.co';
+  const SUPABASE_KEY = 'sb_publishable_BdcPtRwP805GKFgRIwd82A_YxkeCX6y';
+  const $ = id => document.getElementById(id);
+  const msg = (text, kind="") => {
+    $("msg").textContent = text;
+    $("msg").className = "msg" + (kind ? " " + kind : "");
+  };
+
+  $("jsStatus").textContent = "JavaScript ativo • teste via navegador";
+  const stored = localStorage.getItem("motogestor_test_session");
+  if (stored) {
+    try {
+      const s = JSON.parse(stored);
+      if (s?.access_token && s?.user) showPanel(s.user);
+    } catch {}
+  }
+
+  async function api(path, options={}) {
+    const res = await fetch(SUPABASE_URL + path, {
+      ...options,
+      headers: {
+        "apikey": SUPABASE_KEY,
+        "Content-Type": "application/json",
+        ...(options.headers || {})
+      }
+    });
+    let data = {};
+    try { data = await res.json(); } catch {}
+    if (!res.ok) {
+      const e = new Error(data?.msg || data?.message || data?.error_description || data?.error || `Erro HTTP ${res.status}`);
+      e.data = data;
+      throw e;
+    }
+    return data;
+  }
+
+  function showPanel(user) {
+    $("authCard").classList.add("hidden");
+    $("panel").classList.remove("hidden");
+    $("userInfo").textContent = user?.email ? `Conectado como ${user.email}` : "Sessão ativa.";
+  }
+
+  $("loginBtn").addEventListener("click", async () => {
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!email || !password) {
+      msg("Digite o e-mail e a senha.", "err");
+      return;
+    }
+    msg("Entrando...");
+    $("loginBtn").disabled = true;
+    try {
+      const data = await api("/auth/v1/token?grant_type=password", {
+        method: "POST",
+        body: JSON.stringify({email, password})
+      });
+      localStorage.setItem("motogestor_test_session", JSON.stringify(data));
+      msg("Login realizado.", "ok");
+      setTimeout(() => showPanel(data.user), 250);
+    } catch (e) {
+      msg("Não foi possível entrar:\n" + e.message, "err");
+    } finally {
+      $("loginBtn").disabled = false;
+    }
+  });
+
+  $("signupBtn").addEventListener("click", async () => {
+    const name = $("name").value.trim();
+    const whatsapp = $("whatsapp").value.trim();
+    const email = $("email").value.trim();
+    const password = $("password").value;
+    if (!name || !email || !password) {
+      msg("Preencha nome, e-mail e senha.", "err");
+      return;
+    }
+    if (password.length < 6) {
+      msg("Use uma senha com pelo menos 6 caracteres.", "err");
+      return;
+    }
+    msg("Criando conta...");
+    $("signupBtn").disabled = true;
+    try {
+      const data = await api("/auth/v1/signup", {
+        method: "POST",
+        body: JSON.stringify({
+          email,
+          password,
+          data: { name, whatsapp }
+        })
+      });
+      if (data?.access_token) {
+        localStorage.setItem("motogestor_test_session", JSON.stringify(data));
+        msg("Conta criada e login realizado.", "ok");
+        setTimeout(() => showPanel(data.user), 300);
+      } else {
+        msg("Conta criada. Confira seu e-mail e toque no link de confirmação. Depois volte aqui e use Entrar.", "ok");
+      }
+    } catch (e) {
+      msg("Não foi possível criar a conta:\n" + e.message, "err");
+    } finally {
+      $("signupBtn").disabled = false;
+    }
+  });
+
+  $("logoutBtn").addEventListener("click", () => {
+    localStorage.removeItem("motogestor_test_session");
+    location.reload();
+  });
+})();
+</script>
+</body>
+</html>
